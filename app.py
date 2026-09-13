@@ -7,37 +7,49 @@ from PIL import Image
 import os
 import gdown
 
+# ----------------------------------------------------------------------
+# 1. CONFIGURAÇÃO DA PÁGINA
+# ----------------------------------------------------------------------
 st.set_page_config(
     page_title="Triagem Histopatológica com IA",
     page_icon="🔬",
     layout="wide"
 )
 
-# -------------------------------------------------------------
-# CONFIGURAÇÃO DO MODELO NO GOOGLE DRIVE
-# -------------------------------------------------------------
+# ----------------------------------------------------------------------
+# 2. DOWNLOAD E CARREGAMENTO DO MODELO VIA GOOGLE DRIVE
+# ----------------------------------------------------------------------
 GDRIVE_FILE_ID = "1AR-GAa8DAdIGEmmXMOLW93hnDNgzmm9p"
 MODEL_LOCAL_PATH = "inception_multiscale_best.keras"
 
 @st.cache_resource
 def load_classification_model():
     if not os.path.exists(MODEL_LOCAL_PATH):
-        with st.spinner("Baixando modelo do Google Drive (apenas na 1ª execução)..."):
+        with st.spinner("Baixando pesos do modelo via Google Drive (apenas na 1ª execução)..."):
             url = f"https://drive.google.com/uc?id={GDRIVE_FILE_ID}"
             gdown.download(url, MODEL_LOCAL_PATH, quiet=False)
             
     if not os.path.exists(MODEL_LOCAL_PATH):
-        st.error("Falha ao baixar o modelo. Verifique o compartilhamento do Google Drive.")
+        st.error("Falha ao obter o arquivo do modelo. Verifique se o link no Google Drive está com acesso público ('Qualquer pessoa com o link').")
         st.stop()
         
-    return keras.models.load_model(MODEL_LOCAL_PATH, compile=False)
+    custom_objects = {
+        "preprocess_input": tf.keras.applications.inception_v3.preprocess_input
+    }
+        
+    return keras.models.load_model(
+        MODEL_LOCAL_PATH, 
+        custom_objects=custom_objects,
+        compile=False,
+        safe_mode=False
+    )
 
 model = load_classification_model()
 
-# -------------------------------------------------------------
-# BARRA LATERAL
-# -------------------------------------------------------------
-st.sidebar.title("🔬 Parâmetros Clínicos")
+# ----------------------------------------------------------------------
+# 3. BARRA LATERAL (CONFIGURAÇÕES E MÉTRICAS)
+# ----------------------------------------------------------------------
+st.sidebar.title("🔬 Parâmetros do Sistema")
 st.sidebar.markdown("**Arquitetura:** InceptionV3 Multiescala")
 st.sidebar.markdown("**Entrada:** 299 × 299 px")
 
@@ -47,24 +59,24 @@ threshold = st.sidebar.slider(
     max_value=0.90,
     value=0.40,
     step=0.05,
-    help="Limiar de 0.40 calibrado para maximizar a sensibilidade diagnóstica."
+    help="O limiar de 0.40 foi calibrado para priorizar sensibilidade diagnóstica."
 )
 
 st.sidebar.markdown("---")
-st.sidebar.markdown("### Métricas de Teste Cego")
-st.sidebar.write("- **Acurácia:** 94,81%")
+st.sidebar.markdown("### Métricas de Validação Independente")
+st.sidebar.write("- **Acurácia Global:** 94,81%")
 st.sidebar.write("- **ROC AUC:** 0,9893")
 st.sidebar.write("- **Sensibilidade:** 91,38%")
 st.sidebar.write("- **Especificidade:** 98,96%")
 
-# -------------------------------------------------------------
-# TELA PRINCIPAL
-# -------------------------------------------------------------
-st.title("Sistema de Auxílio ao Diagnóstico Histopatológico")
-st.markdown("Classificação automatizada de lesões teciduais (H&E) com interpretabilidade via Grad-CAM.")
+# ----------------------------------------------------------------------
+# 4. ÁREA PRINCIPAL E FLUXO DE INFERÊNCIA
+# ----------------------------------------------------------------------
+st.title("Sistema de Auxílio ao Diagnóstico Histopatológico (H&E)")
+st.markdown("Plataforma computacional para classificação e explicabilidade visual de lâminas teciduais.")
 
 uploaded_file = st.file_uploader(
-    "Carregue uma imagem histopatológica...", 
+    "Envie a imagem histopatológica para triagem...", 
     type=["jpg", "png", "jpeg", "tif", "bmp"]
 )
 
@@ -74,20 +86,22 @@ if uploaded_file is not None:
 
     col1, col2, col3 = st.columns([1, 1, 1])
 
+    # Coluna 1: Imagem enviada
     with col1:
-        st.subheader("1. Lâmina Original")
+        st.subheader("1. Lâmina Enviada")
         st.image(image, use_container_width=True)
 
     # Pré-processamento
     img_resized = image.resize((299, 299))
     img_array = np.expand_dims(np.array(img_resized, dtype=np.float32), axis=0)
 
-    # Inferência
+    # Predição
     with st.spinner("Processando diagnóstico..."):
         prob = float(model.predict(img_array, verbose=0)[0][0])
         is_malignant = prob >= threshold
         diagnostico = "Maligno" if is_malignant else "Benigno"
 
+    # Coluna 2: Resultado e Métricas
     with col2:
         st.subheader("2. Laudo Automatizado")
         if is_malignant:
@@ -97,11 +111,11 @@ if uploaded_file is not None:
 
         st.metric("Probabilidade de Malignidade", f"{prob * 100:.2f}%")
         st.progress(prob)
-        st.caption(f"Critério adotado: P(Maligno) ≥ {threshold:.2f}")
+        st.caption(f"Critério clínico adotado: Maligno se P ≥ {threshold:.2f}")
 
-    # Grad-CAM com logits
+    # Coluna 3: Grad-CAM
     with col3:
-        st.subheader("3. Mapa Grad-CAM")
+        st.subheader("3. Explicabilidade (Grad-CAM)")
         try:
             last_conv = model.get_layer("mixed7")
             penultimate = model.get_layer("dense")
@@ -122,7 +136,6 @@ if uploaded_file is not None:
             if heatmap.max() > 0:
                 heatmap /= heatmap.max()
 
-            # Suavização anatômica
             heatmap_smooth = cv2.GaussianBlur(heatmap, (3, 3), 0)
             heatmap_resized = cv2.resize(heatmap_smooth, (orig_w, orig_h), interpolation=cv2.INTER_CUBIC)
             heatmap_resized = np.clip(heatmap_resized, 0, 1)
@@ -133,4 +146,4 @@ if uploaded_file is not None:
             superimposed = np.uint8(0.45 * heatmap_color + 0.55 * np.array(image))
             st.image(superimposed, use_container_width=True)
         except Exception as e:
-            st.warning(f"Grad-CAM indisponível para esta camada: {e}")
+            st.warning(f"Grad-CAM não pôde ser gerado para esta camada: {e}")
