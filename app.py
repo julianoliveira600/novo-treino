@@ -172,19 +172,38 @@ if uploaded_file is not None:
 
             grads = tape.gradient(target, conv_out)
             pooled_grads = tf.reduce_mean(grads, axis=(0, 1, 2))
+            
+            # Ponderação dos canais convolucionais
             heatmap = tf.maximum(conv_out[0] @ pooled_grads[..., tf.newaxis], 0.0)
             heatmap = tf.squeeze(heatmap).numpy()
+
             if heatmap.max() > 0:
                 heatmap /= heatmap.max()
 
-            heatmap_smooth = cv2.GaussianBlur(heatmap, (3, 3), 0)
+            # --- MELHORIA DE CONTRASTE E ISOLAMENTO DE FOCOS ---
+            # Remove ativações fracas (abaixo do limiar de relevância)
+            threshold_activation = 0.35
+            heatmap_filtered = np.where(heatmap >= threshold_activation, heatmap, 0.0)
+
+            # Redimensionamento suave para o tamanho nativo da imagem
+            heatmap_smooth = cv2.GaussianBlur(heatmap_filtered, (5, 5), 0)
             heatmap_resized = cv2.resize(heatmap_smooth, (orig_w, orig_h), interpolation=cv2.INTER_CUBIC)
             heatmap_resized = np.clip(heatmap_resized, 0, 1)
 
+            # Colormap JET (Azul -> Verde -> Amarelo -> Vermelho)
             heatmap_color = cv2.applyColorMap(np.uint8(255 * heatmap_resized), cv2.COLORMAP_JET)
             heatmap_color = cv2.cvtColor(heatmap_color, cv2.COLOR_BGR2RGB)
 
-            superimposed = np.uint8(0.45 * heatmap_color + 0.55 * np.array(image))
+            # Máscara de transparência progressiva: onde a ativação é zero, não pinta nada
+            alpha_mask = np.expand_dims(heatmap_resized, axis=-1)
+            orig_img_np = np.array(image, dtype=np.float32)
+            heatmap_color_float = heatmap_color.astype(np.float32)
+
+            # Sobreposição ponderada com foco nítido
+            blend = orig_img_np * (1.0 - 0.65 * alpha_mask) + heatmap_color_float * (0.65 * alpha_mask)
+            superimposed = np.clip(blend, 0, 255).astype(np.uint8)
+
             st.image(superimposed, use_container_width=True)
+            st.caption("Focos quentes (amarelo/vermelho) indicam áreas determinantes para a classificação.")
         except Exception as e:
             st.warning(f"Grad-CAM não pôde ser gerado para esta camada: {e}")
