@@ -1,10 +1,14 @@
 import streamlit as st
+import os
+
+# Força compatibilidade com Keras 2 / tf-keras
+os.environ["TF_USE_LEGACY_KERAS"] = "1"
+
 import tensorflow as tf
 from tensorflow import keras
 import numpy as np
 import cv2
 from PIL import Image
-import os
 import gdown
 
 # ----------------------------------------------------------------------
@@ -30,19 +34,26 @@ def load_classification_model():
             gdown.download(url, MODEL_LOCAL_PATH, quiet=False)
             
     if not os.path.exists(MODEL_LOCAL_PATH):
-        st.error("Falha ao obter o arquivo do modelo. Verifique se o link no Google Drive está com acesso público ('Qualquer pessoa com o link').")
+        st.error("Falha ao obter o arquivo do modelo. Verifique o compartilhamento do Google Drive.")
         st.stop()
         
     custom_objects = {
         "preprocess_input": tf.keras.applications.inception_v3.preprocess_input
     }
         
-    return keras.models.load_model(
-        MODEL_LOCAL_PATH, 
-        custom_objects=custom_objects,
-        compile=False,
-        safe_mode=False
-    )
+    try:
+        return keras.models.load_model(
+            MODEL_LOCAL_PATH, 
+            custom_objects=custom_objects,
+            compile=False,
+            safe_mode=False
+        )
+    except Exception:
+        import tf_keras
+        return tf_keras.models.load_model(
+            MODEL_LOCAL_PATH, 
+            compile=False
+        )
 
 model = load_classification_model()
 
