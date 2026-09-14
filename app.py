@@ -9,86 +9,12 @@ import gdown
 import zipfile
 import json
 import shutil
-
-#-------------------------------------------------------------
-# 1. Importação pdf
-#-------------------------------------------------------------
-from fpdf import FPDF
-import io
 import tempfile
 from datetime import datetime
-
-def generate_pdf_report(orig_img_pil, cam_img_np, filename, prob, threshold, diagnostico):
-    pdf = FPDF()
-    pdf.add_page()
-    pdf.set_auto_page_break(auto=True, margin=15)
-    
-    # Cabeçalho
-    pdf.set_font("Helvetica", "B", 18)
-    pdf.cell(0, 10, "Relatório de Triagem Histopatológica", ln=True, align="C")
-    pdf.set_font("Helvetica", "I", 10)
-    pdf.cell(0, 6, f"Gerado em: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}", ln=True, align="C")
-    pdf.ln(8)
-    
-    # Metadados e Parâmetros
-    pdf.set_font("Helvetica", "B", 12)
-    pdf.cell(0, 8, "1. Dados do Exame", ln=True)
-    pdf.set_font("Helvetica", "", 10)
-    pdf.cell(0, 6, f"Arquivo da Lâmina: {filename}", ln=True)
-    pdf.cell(0, 6, "Arquitetura do Modelo: InceptionV3 Multiescala", ln=True)
-    pdf.cell(0, 6, f"Limiar Diagnóstico Adotado: {threshold:.2f}", ln=True)
-    pdf.ln(5)
-    
-    # Diagnóstico Automatizado
-    pdf.set_font("Helvetica", "B", 12)
-    pdf.cell(0, 8, "2. Resultado Automatizado", ln=True)
-    pdf.set_font("Helvetica", "B", 11)
-    
-    # Cor do texto: Vermelho para Maligno, Verde para Benigno
-    if diagnostico == "Maligno":
-        pdf.set_text_color(180, 0, 0)
-    else:
-        pdf.set_text_color(0, 130, 0)
-    pdf.cell(0, 7, f"Classificação Estimada: {diagnostico}", ln=True)
-    
-    pdf.set_text_color(0, 0, 0)
-    pdf.set_font("Helvetica", "", 10)
-    pdf.cell(0, 6, f"Probabilidade de Malignidade: {prob * 100:.2f}%", ln=True)
-    pdf.ln(8)
-    
-    # Imagens do Exame lado a lado
-    pdf.set_font("Helvetica", "B", 12)
-    pdf.cell(0, 8, "3. Registro Visual e Explicabilidade (Grad-CAM)", ln=True)
-    pdf.ln(2)
-    
-    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f_orig, \
-         tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f_cam:
-        
-        orig_img_pil.save(f_orig.name, format="PNG")
-        Image.fromarray(cam_img_np).save(f_cam.name, format="PNG")
-        
-        y_pos = pdf.get_y()
-        pdf.image(f_orig.name, x=15, y=y_pos, w=85)
-        pdf.image(f_cam.name, x=110, y=y_pos, w=85)
-        
-        # Legendas
-        pdf.set_y(y_pos + 90)
-        pdf.set_font("Helvetica", "I", 9)
-        pdf.cell(85, 6, "Lâmina Original (H&E)", align="C")
-        pdf.cell(10, 6, "")
-        pdf.cell(85, 6, "Mapa de Atenção Grad-CAM", align="C")
-        
-        os.remove(f_orig.name)
-        os.remove(f_cam.name)
-        
-    pdf.ln(15)
-    pdf.set_font("Helvetica", "I", 8)
-    pdf.multi_cell(0, 4, "Nota: Este laudo foi gerado por um modelo de aprendizado profundo para triagem computacional de apoio e não substitui a avaliação microscópica definitiva realizada por um médico patologista.")
-    
-    return bytes(pdf.output())
+from fpdf import FPDF
 
 # -------------------------------------------------------------
-# 1.1 CONFIGURAÇÃO DA PÁGINA
+# 1. CONFIGURAÇÃO DA PÁGINA
 # -------------------------------------------------------------
 st.set_page_config(
     page_title="Triagem Histopatológica com IA",
@@ -97,14 +23,84 @@ st.set_page_config(
 )
 
 # -------------------------------------------------------------
-# 2. DOWNLOAD E CORREÇÃO AUTOMÁTICA DO MODELO
+# 2. FUNÇÃO DE GERAÇÃO DE RELATÓRIO PDF
+# -------------------------------------------------------------
+def generate_pdf_report(orig_img_pil, cam_img_np, filename, prob, threshold, diagnostico):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_auto_page_break(auto=True, margin=15)
+    
+    # Cabeçalho
+    pdf.set_font("Helvetica", "B", 18)
+    pdf.cell(0, 10, "Relatorio de Triagem Histopatologica", ln=True, align="C")
+    pdf.set_font("Helvetica", "I", 10)
+    pdf.cell(0, 6, f"Gerado em: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}", ln=True, align="C")
+    pdf.ln(8)
+    
+    # Dados do Exame
+    pdf.set_font("Helvetica", "B", 12)
+    pdf.cell(0, 8, "1. Dados do Exame", ln=True)
+    pdf.set_font("Helvetica", "", 10)
+    pdf.cell(0, 6, f"Arquivo da Lamina: {filename}", ln=True)
+    pdf.cell(0, 6, "Arquitetura: InceptionV3 Multiescala", ln=True)
+    pdf.cell(0, 6, f"Limiar Diagnostico Adotado: {threshold:.2f}", ln=True)
+    pdf.ln(5)
+    
+    # Diagnóstico Automatizado
+    pdf.set_font("Helvetica", "B", 12)
+    pdf.cell(0, 8, "2. Resultado Automatizado", ln=True)
+    pdf.set_font("Helvetica", "B", 11)
+    
+    if diagnostico == "Maligno":
+        pdf.set_text_color(180, 0, 0)
+    else:
+        pdf.set_text_color(0, 130, 0)
+    pdf.cell(0, 7, f"Classificacao Estimada: {diagnostico}", ln=True)
+    
+    pdf.set_text_color(0, 0, 0)
+    pdf.set_font("Helvetica", "", 10)
+    pdf.cell(0, 6, f"Probabilidade de Malignidade: {prob * 100:.2f}%", ln=True)
+    pdf.ln(8)
+    
+    # Imagens do Exame
+    pdf.set_font("Helvetica", "B", 12)
+    pdf.cell(0, 8, "3. Registro Visual e Explicabilidade (Grad-CAM)", ln=True)
+    pdf.ln(2)
+    
+    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f_orig:
+        orig_img_pil.save(f_orig.name, format="PNG")
+        y_pos = pdf.get_y()
+        pdf.image(f_orig.name, x=15, y=y_pos, w=85)
+        
+        if cam_img_np is not None:
+            with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f_cam:
+                Image.fromarray(cam_img_np).save(f_cam.name, format="PNG")
+                pdf.image(f_cam.name, x=110, y=y_pos, w=85)
+                os.remove(f_cam.name)
+        
+        pdf.set_y(y_pos + 90)
+        pdf.set_font("Helvetica", "I", 9)
+        pdf.cell(85, 6, "Lamina Original (H&E)", align="C")
+        if cam_img_np is not None:
+            pdf.cell(10, 6, "")
+            pdf.cell(85, 6, "Mapa de Atencao Grad-CAM", align="C")
+            
+        os.remove(f_orig.name)
+        
+    pdf.ln(15)
+    pdf.set_font("Helvetica", "I", 8)
+    pdf.multi_cell(0, 4, "Nota: Este laudo foi gerado por um modelo de aprendizado profundo para triagem computacional de apoio e nao substitui a avaliacao microscopica definitiva realizada por um medico patologista.")
+    
+    return bytes(pdf.output())
+
+# -------------------------------------------------------------
+# 3. DOWNLOAD E CORREÇÃO AUTOMÁTICA DO MODELO
 # -------------------------------------------------------------
 GDRIVE_FILE_ID = "1AR-GAa8DAdIGEmmXMOLW93hnDNgzmm9p"
 MODEL_RAW_PATH = "model_raw.keras"
 MODEL_PATCHED_PATH = "inception_multiscale_fixed.keras"
 
 def strip_quantization_keys(obj):
-    """Remove recursivamente qualquer chave quantization_config do JSON do modelo."""
     if isinstance(obj, dict):
         obj.pop("quantization_config", None)
         for k, v in list(obj.items()):
@@ -114,7 +110,6 @@ def strip_quantization_keys(obj):
             strip_quantization_keys(item)
 
 def patch_keras_zip(src_zip, dst_zip):
-    """Abre o arquivo .keras, limpa o config.json e regrava pronto para uso."""
     tmp_dir = "/tmp/keras_patch"
     if os.path.exists(tmp_dir):
         shutil.rmtree(tmp_dir)
@@ -170,7 +165,7 @@ def load_classification_model():
 model = load_classification_model()
 
 # -------------------------------------------------------------
-# 3. BARRA LATERAL (CONFIGURAÇÕES E MÉTRICAS)
+# 4. BARRA LATERAL (CONFIGURAÇÕES E MÉTRICAS)
 # -------------------------------------------------------------
 st.sidebar.title("🔬 Parâmetros do Sistema")
 st.sidebar.markdown("**Arquitetura:** InceptionV3 Multiescala")
@@ -193,7 +188,7 @@ st.sidebar.write("- **Sensibilidade:** 91,38%")
 st.sidebar.write("- **Especificidade:** 98,96%")
 
 # -------------------------------------------------------------
-# 4. ÁREA PRINCIPAL E FLUXO DE INFERÊNCIA
+# 5. ÁREA PRINCIPAL E FLUXO DE INFERÊNCIA
 # -------------------------------------------------------------
 st.title("Sistema de Auxílio ao Diagnóstico Histopatológico (H&E)")
 st.markdown("Plataforma computacional para classificação e explicabilidade visual de lâminas teciduais.")
@@ -206,26 +201,9 @@ uploaded_file = st.file_uploader(
 if uploaded_file is not None:
     image = Image.open(uploaded_file).convert("RGB")
     orig_w, orig_h = image.size
+    superimposed = None  # Inicialização segura para evitar NameError
 
     col1, col2, col3 = st.columns([1, 1, 1])
-
-    st.markdown("---")
-    pdf_data = generate_pdf_report(
-        orig_img_pil=image,
-        cam_img_np=superimposed,
-        filename=uploaded_file.name,
-        prob=prob,
-        threshold=threshold,
-        diagnostico=diagnostico
-    )
-
-    st.download_button(
-        label="📄 Baixar Laudo Diagnóstico em PDF",
-        data=pdf_data,
-        file_name=f"laudo_{uploaded_file.name.split('.')[0]}.pdf",
-        mime="application/pdf",
-        use_container_width=True
-    )
 
     with col1:
         st.subheader("1. Lâmina Enviada")
@@ -268,33 +246,26 @@ if uploaded_file is not None:
             grads = tape.gradient(target, conv_out)
             pooled_grads = tf.reduce_mean(grads, axis=(0, 1, 2))
             
-            # Ponderação dos canais convolucionais
             heatmap = tf.maximum(conv_out[0] @ pooled_grads[..., tf.newaxis], 0.0)
             heatmap = tf.squeeze(heatmap).numpy()
 
             if heatmap.max() > 0:
                 heatmap /= heatmap.max()
 
-            # --- MELHORIA DE CONTRASTE E ISOLAMENTO DE FOCOS ---
-            # Remove ativações fracas (abaixo do limiar de relevância)
             threshold_activation = 0.35
             heatmap_filtered = np.where(heatmap >= threshold_activation, heatmap, 0.0)
 
-            # Redimensionamento suave para o tamanho nativo da imagem
             heatmap_smooth = cv2.GaussianBlur(heatmap_filtered, (5, 5), 0)
             heatmap_resized = cv2.resize(heatmap_smooth, (orig_w, orig_h), interpolation=cv2.INTER_CUBIC)
             heatmap_resized = np.clip(heatmap_resized, 0, 1)
 
-            # Colormap JET (Azul -> Verde -> Amarelo -> Vermelho)
             heatmap_color = cv2.applyColorMap(np.uint8(255 * heatmap_resized), cv2.COLORMAP_JET)
             heatmap_color = cv2.cvtColor(heatmap_color, cv2.COLOR_BGR2RGB)
 
-            # Máscara de transparência progressiva: onde a ativação é zero, não pinta nada
             alpha_mask = np.expand_dims(heatmap_resized, axis=-1)
             orig_img_np = np.array(image, dtype=np.float32)
             heatmap_color_float = heatmap_color.astype(np.float32)
 
-            # Sobreposição ponderada com foco nítido
             blend = orig_img_np * (1.0 - 0.65 * alpha_mask) + heatmap_color_float * (0.65 * alpha_mask)
             superimposed = np.clip(blend, 0, 255).astype(np.uint8)
 
@@ -302,3 +273,23 @@ if uploaded_file is not None:
             st.caption("Focos quentes (amarelo/vermelho) indicam áreas determinantes para a classificação.")
         except Exception as e:
             st.warning(f"Grad-CAM não pôde ser gerado para esta camada: {e}")
+
+    # Geração e Botão de Download do Laudo PDF
+    st.markdown("---")
+    pdf_bytes = generate_pdf_report(
+        orig_img_pil=image,
+        cam_img_np=superimposed,
+        filename=uploaded_file.name,
+        prob=prob,
+        threshold=threshold,
+        diagnostico=diagnostico
+    )
+
+    clean_name = os.path.splitext(uploaded_file.name)[0]
+    st.download_button(
+        label="📄 Baixar Laudo Diagnóstico em PDF",
+        data=pdf_bytes,
+        file_name=f"laudo_{clean_name}.pdf",
+        mime="application/pdf",
+        use_container_width=True
+    )
