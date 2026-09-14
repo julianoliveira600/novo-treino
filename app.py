@@ -1,6 +1,6 @@
 import streamlit as st
 import tensorflow as tf
-from tensorflow import keras
+import keras
 import numpy as np
 import cv2
 from PIL import Image
@@ -33,20 +33,27 @@ def load_classification_model():
         st.error("Falha ao obter o arquivo do modelo. Verifique se o link no Google Drive está com acesso público.")
         st.stop()
         
-    custom_objects = {
-        "preprocess_input": tf.keras.applications.inception_v3.preprocess_input
+    # Mapeamento completo de possíveis objetos/funções usadas no treinamento
+    custom_dict = {
+        "preprocess_input": tf.keras.applications.inception_v3.preprocess_input,
+        "Functional": keras.models.Functional,
+        "Model": keras.Model
     }
 
+    # Desativa checagem estrita de objetos seguros
+    keras.config.enable_unsafe_deserialization()
+
     try:
-        return keras.models.load_model(
+        return keras.saving.load_model(
             MODEL_LOCAL_PATH,
-            custom_objects=custom_objects,
+            custom_objects=custom_dict,
             compile=False,
             safe_mode=False
         )
     except Exception:
         return keras.models.load_model(
             MODEL_LOCAL_PATH,
+            custom_objects=custom_dict,
             compile=False,
             safe_mode=False
         )
