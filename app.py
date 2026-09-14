@@ -25,47 +25,60 @@ st.set_page_config(
 # -------------------------------------------------------------
 # 2. FUNÇÃO DE GERAÇÃO DE RELATÓRIO PDF
 # -------------------------------------------------------------
-def generate_pdf_report(orig_img_pil, cam_img_np, filename, prob, threshold, diagnostico):
+def generate_pdf_report(orig_img_pil, cam_img_np, filename, prob, threshold, diagnostico, info_paciente):
     pdf = FPDF()
     pdf.add_page()
     pdf.set_auto_page_break(auto=True, margin=15)
     
-    # Cabeçalho
+    # Cabeçalho Principal
     pdf.set_font("Helvetica", "B", 18)
-    pdf.cell(0, 10, "Relatorio de Triagem Histopatologica", ln=True, align="C")
-    pdf.set_font("Helvetica", "I", 10)
-    pdf.cell(0, 6, f"Gerado em: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}", ln=True, align="C")
-    pdf.ln(8)
-    
-    # Dados do Exame
-    pdf.set_font("Helvetica", "B", 12)
-    pdf.cell(0, 8, "1. Dados do Exame", ln=True)
-    pdf.set_font("Helvetica", "", 10)
-    pdf.cell(0, 6, f"Arquivo da Lamina: {filename}", ln=True)
-    pdf.cell(0, 6, "Arquitetura: InceptionV3 Multiescala", ln=True)
-    pdf.cell(0, 6, f"Limiar Diagnostico Adotado: {threshold:.2f}", ln=True)
+    pdf.cell(0, 10, "Relatorio de Triagem Histopatologica Veterinaria", ln=True, align="C")
+    pdf.set_font("Helvetica", "I", 9)
+    pdf.cell(0, 5, f"Gerado em: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}", ln=True, align="C")
     pdf.ln(5)
     
-    # Diagnóstico Automatizado
-    pdf.set_font("Helvetica", "B", 12)
-    pdf.cell(0, 8, "2. Resultado Automatizado", ln=True)
+    # 1. Dados do Paciente e Tutor
     pdf.set_font("Helvetica", "B", 11)
+    pdf.cell(0, 7, "1. Identificacao do Paciente e Amostra", ln=True)
+    pdf.set_font("Helvetica", "", 10)
     
+    col_w1, col_w2 = 95, 95
+    pdf.cell(col_w1, 6, f"Paciente: {info_paciente['nome'] or 'Nao informado'}", ln=False)
+    pdf.cell(col_w2, 6, f"Tutor: {info_paciente['tutor'] or 'Nao informado'}", ln=True)
+    
+    pdf.cell(col_w1, 6, f"Especie: {info_paciente['especie']}", ln=False)
+    pdf.cell(col_w2, 6, f"Raca: {info_paciente['raca'] or 'SRD / Nao informada'}", ln=True)
+    
+    pdf.cell(col_w1, 6, f"Local da Coleta: {info_paciente['topografia'] or 'Nao informado'}", ln=False)
+    pdf.cell(col_w2, 6, f"Arquivo da Lamina: {filename}", ln=True)
+    
+    if info_paciente['obs']:
+        pdf.set_font("Helvetica", "I", 9)
+        pdf.multi_cell(0, 5, f"Observacoes Clinicas: {info_paciente['obs']}")
+    pdf.ln(4)
+    
+    # 2. Diagnóstico Automatizado
+    pdf.set_font("Helvetica", "B", 11)
+    pdf.cell(0, 7, "2. Parecer Computacional", ln=True)
+    pdf.set_font("Helvetica", "", 10)
+    pdf.cell(0, 6, f"Arquitetura: InceptionV3 Multiescala (H&E 299x299px) | Limiar: {threshold:.2f}", ln=True)
+    
+    pdf.set_font("Helvetica", "B", 11)
     if diagnostico == "Maligno":
         pdf.set_text_color(180, 0, 0)
     else:
         pdf.set_text_color(0, 130, 0)
-    pdf.cell(0, 7, f"Classificacao Estimada: {diagnostico}", ln=True)
+    pdf.cell(0, 6, f"Classificacao Sugerida: {diagnostico}", ln=True)
     
     pdf.set_text_color(0, 0, 0)
     pdf.set_font("Helvetica", "", 10)
-    pdf.cell(0, 6, f"Probabilidade de Malignidade: {prob * 100:.2f}%", ln=True)
-    pdf.ln(8)
+    pdf.cell(0, 6, f"Indice de Confianca (Probabilidade de Malignidade): {prob * 100:.2f}%", ln=True)
+    pdf.ln(4)
     
-    # Imagens do Exame
-    pdf.set_font("Helvetica", "B", 12)
-    pdf.cell(0, 8, "3. Registro Visual e Explicabilidade (Grad-CAM)", ln=True)
-    pdf.ln(2)
+    # 3. Imagens do Exame
+    pdf.set_font("Helvetica", "B", 11)
+    pdf.cell(0, 7, "3. Registro Visual e Explicabilidade (Grad-CAM)", ln=True)
+    pdf.ln(1)
     
     with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f_orig:
         orig_img_pil.save(f_orig.name, format="PNG")
@@ -83,13 +96,13 @@ def generate_pdf_report(orig_img_pil, cam_img_np, filename, prob, threshold, dia
         pdf.cell(85, 6, "Lamina Original (H&E)", align="C")
         if cam_img_np is not None:
             pdf.cell(10, 6, "")
-            pdf.cell(85, 6, "Mapa de Atencao Grad-CAM", align="C")
+            pdf.cell(85, 6, "Mapa de Atencao Grad-CAM (mixed7)", align="C")
             
         os.remove(f_orig.name)
         
-    pdf.ln(15)
+    pdf.ln(12)
     pdf.set_font("Helvetica", "I", 8)
-    pdf.multi_cell(0, 4, "Nota: Este laudo foi gerado por um modelo de aprendizado profundo para triagem computacional de apoio e nao substitui a avaliacao microscopica definitiva realizada por um medico patologista.")
+    pdf.multi_cell(0, 4, "Aviso Legal: Documento gerado por modelo computacional de triagem assistida (Deep Learning). Os resultados fornecidos possuem finalidade de suporte a decisao e devem ser correlacionados com dados clinicos, historico do animal e revisao macro/microscopica por medico veterinario patologista.")
     
     return bytes(pdf.output())
 
@@ -165,7 +178,7 @@ def load_classification_model():
 model = load_classification_model()
 
 # -------------------------------------------------------------
-# 4. BARRA LATERAL (CONFIGURAÇÕES E MÉTRICAS)
+# 4. BARRA LATERAL (CONFIGURAÇÕES E PARÂMETROS)
 # -------------------------------------------------------------
 st.sidebar.title("🔬 Parâmetros do Sistema")
 st.sidebar.markdown("**Arquitetura:** InceptionV3 Multiescala")
@@ -203,12 +216,38 @@ cam_opacity = st.sidebar.slider(
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("### Métricas de Validação Independente")
+st.sidebar.write("- **Acurácia Global:** 94,81%")
+st.sidebar.write("- **ROC AUC:** 0,9893")
+st.sidebar.write("- **Sensibilidade:** 91,38%")
+st.sidebar.write("- **Especificidade:** 98,96%")
 
 # -------------------------------------------------------------
-# 5. ÁREA PRINCIPAL E FLUXO DE INFERÊNCIA
+# 5. ÁREA PRINCIPAL
 # -------------------------------------------------------------
 st.title("Sistema de Auxílio ao Diagnóstico Histopatológico (H&E)")
 st.markdown("Plataforma computacional para classificação e explicabilidade visual de lâminas teciduais.")
+
+# Formulário de Anamnese / Identificação
+with st.expander("📋 Identificação da Amostra e Paciente (Opcional)", expanded=True):
+    col_p1, col_p2, col_p3 = st.columns(3)
+    with col_p1:
+        paciente_nome = st.text_input("Nome do Paciente:", placeholder="Ex: Mel, Thor, Fred")
+        tutor_nome = st.text_input("Nome do Tutor:", placeholder="Ex: Maria Silva")
+    with col_p2:
+        especie = st.selectbox("Espécie:", ["Canina", "Felina", "Outra"])
+        raca = st.text_input("Raça:", placeholder="Ex: SRD, Poodle, Pastor Alemão")
+    with col_p3:
+        topografia = st.text_input("Topografia / Órgão de Coleta:", placeholder="Ex: Mama M4, Pele dorsal")
+        obs_clinica = st.text_area("Observações Clínicas:", placeholder="Ex: Nódulo firme, ulcerado, evolução rápida", height=68)
+
+info_paciente = {
+    "nome": paciente_nome,
+    "tutor": tutor_nome,
+    "especie": especie,
+    "raca": raca,
+    "topografia": topografia,
+    "obs": obs_clinica
+}
 
 uploaded_file = st.file_uploader(
     "Envie a imagem histopatológica para triagem...", 
@@ -218,7 +257,7 @@ uploaded_file = st.file_uploader(
 if uploaded_file is not None:
     image = Image.open(uploaded_file).convert("RGB")
     orig_w, orig_h = image.size
-    superimposed = None  # Inicialização segura para evitar NameError
+    superimposed = None
 
     col1, col2, col3 = st.columns([1, 1, 1])
 
@@ -269,9 +308,7 @@ if uploaded_file is not None:
             if heatmap.max() > 0:
                 heatmap /= heatmap.max()
 
-            threshold_activation = 0.35
-            heatmap_filtered = np.where(heatmap >= threshold_activation, heatmap, 0.0)
-
+            heatmap_filtered = np.where(heatmap >= cam_sensitivity, heatmap, 0.0)
             heatmap_smooth = cv2.GaussianBlur(heatmap_filtered, (5, 5), 0)
             heatmap_resized = cv2.resize(heatmap_smooth, (orig_w, orig_h), interpolation=cv2.INTER_CUBIC)
             heatmap_resized = np.clip(heatmap_resized, 0, 1)
@@ -283,7 +320,7 @@ if uploaded_file is not None:
             orig_img_np = np.array(image, dtype=np.float32)
             heatmap_color_float = heatmap_color.astype(np.float32)
 
-            blend = orig_img_np * (1.0 - 0.65 * alpha_mask) + heatmap_color_float * (0.65 * alpha_mask)
+            blend = orig_img_np * (1.0 - cam_opacity * alpha_mask) + heatmap_color_float * (cam_opacity * alpha_mask)
             superimposed = np.clip(blend, 0, 255).astype(np.uint8)
 
             st.image(superimposed, use_container_width=True)
@@ -291,7 +328,7 @@ if uploaded_file is not None:
         except Exception as e:
             st.warning(f"Grad-CAM não pôde ser gerado para esta camada: {e}")
 
-    # Geração e Botão de Download do Laudo PDF
+    # Geração e Download do Relatório
     st.markdown("---")
     pdf_bytes = generate_pdf_report(
         orig_img_pil=image,
@@ -299,12 +336,13 @@ if uploaded_file is not None:
         filename=uploaded_file.name,
         prob=prob,
         threshold=threshold,
-        diagnostico=diagnostico
+        diagnostico=diagnostico,
+        info_paciente=info_paciente
     )
 
     clean_name = os.path.splitext(uploaded_file.name)[0]
     st.download_button(
-        label="📄 Baixar Laudo Diagnóstico em PDF",
+        label="📄 Baixar Laudo Diagnóstico Completo em PDF",
         data=pdf_bytes,
         file_name=f"laudo_{clean_name}.pdf",
         mime="application/pdf",
