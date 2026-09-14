@@ -17,16 +17,7 @@ st.set_page_config(
 )
 
 # -------------------------------------------------------------
-# 2. PATCH DE COMPATIBILIDADE PARA O KERAS 3
-# -------------------------------------------------------------
-# Corrige o erro "Unrecognized keyword arguments passed to Dense: {'quantization_config': None}"
-class CompatibleDense(keras.layers.Dense):
-    def __init__(self, *args, **kwargs):
-        kwargs.pop("quantization_config", None)
-        super().__init__(*args, **kwargs)
-
-# -------------------------------------------------------------
-# 3. DOWNLOAD E CARREGAMENTO DO MODELO VIA GOOGLE DRIVE
+# 2. DOWNLOAD E CARREGAMENTO DO MODELO VIA GOOGLE DRIVE
 # -------------------------------------------------------------
 GDRIVE_FILE_ID = "1AR-GAa8DAdIGEmmXMOLW93hnDNgzmm9p"
 MODEL_LOCAL_PATH = "inception_multiscale_best.keras"
@@ -39,7 +30,7 @@ def load_classification_model():
             gdown.download(url, MODEL_LOCAL_PATH, quiet=False)
             
     if not os.path.exists(MODEL_LOCAL_PATH):
-        st.error("Falha ao obter o arquivo do modelo. Verifique o compartilhamento do Google Drive.")
+        st.error("Falha ao obter o arquivo do modelo. Verifique se o link no Google Drive está com acesso público.")
         st.stop()
 
     try:
@@ -47,14 +38,8 @@ def load_classification_model():
     except Exception:
         pass
 
-    custom_objects = {
-        "Dense": CompatibleDense,
-        "preprocess_input": tf.keras.applications.inception_v3.preprocess_input
-    }
-
     return keras.models.load_model(
         MODEL_LOCAL_PATH,
-        custom_objects=custom_objects,
         compile=False,
         safe_mode=False
     )
@@ -62,7 +47,7 @@ def load_classification_model():
 model = load_classification_model()
 
 # -------------------------------------------------------------
-# 4. BARRA LATERAL (CONFIGURAÇÕES E MÉTRICAS)
+# 3. BARRA LATERAL (CONFIGURAÇÕES E MÉTRICAS)
 # -------------------------------------------------------------
 st.sidebar.title("🔬 Parâmetros do Sistema")
 st.sidebar.markdown("**Arquitetura:** InceptionV3 Multiescala")
@@ -85,7 +70,7 @@ st.sidebar.write("- **Sensibilidade:** 91,38%")
 st.sidebar.write("- **Especificidade:** 98,96%")
 
 # -------------------------------------------------------------
-# 5. ÁREA PRINCIPAL E FLUXO DE INFERÊNCIA
+# 4. ÁREA PRINCIPAL E FLUXO DE INFERÊNCIA
 # -------------------------------------------------------------
 st.title("Sistema de Auxílio ao Diagnóstico Histopatológico (H&E)")
 st.markdown("Plataforma computacional para classificação e explicabilidade visual de lâminas teciduais.")
