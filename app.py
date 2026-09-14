@@ -6,6 +6,9 @@ import cv2
 from PIL import Image
 import os
 import gdown
+import zipfile
+import json
+import shutil
 
 # -------------------------------------------------------------
 # 1. CONFIGURAÇÃO DA PÁGINA
@@ -17,29 +20,72 @@ st.set_page_config(
 )
 
 # -------------------------------------------------------------
-# 2. DOWNLOAD E CARREGAMENTO DO MODELO VIA GOOGLE DRIVE
+# 2. DOWNLOAD E CORREÇÃO AUTOMÁTICA DO MODELO
 # -------------------------------------------------------------
 GDRIVE_FILE_ID = "1AR-GAa8DAdIGEmmXMOLW93hnDNgzmm9p"
-MODEL_LOCAL_PATH = "inception_multiscale_best.keras"
+MODEL_RAW_PATH = "model_raw.keras"
+MODEL_PATCHED_PATH = "inception_multiscale_fixed.keras"
+
+def strip_quantization_keys(obj):
+    """Remove recursivamente qualquer chave quantization_config do JSON do modelo."""
+    if isinstance(obj, dict):
+        obj.pop("quantization_config", None)
+        for k, v in list(obj.items()):
+            strip_quantization_keys(v)
+    elif isinstance(obj, list):
+        for item in obj:
+            strip_quantization_keys(item)
+
+def patch_keras_zip(src_zip, dst_zip):
+    """Abre o arquivo .keras, limpa o config.json e regrava pronto para uso."""
+    tmp_dir = "/tmp/keras_patch"
+    if os.path.exists(tmp_dir):
+        shutil.rmtree(tmp_dir)
+    os.makedirs(tmp_dir, exist_ok=True)
+
+    with zipfile.ZipFile(src_zip, 'r') as zin:
+        zin.extractall(tmp_dir)
+
+    cfg_path = os.path.join(tmp_dir, "config.json")
+    if os.path.exists(cfg_path):
+        with open(cfg_path, "r", encoding="utf-8") as f:
+            cfg = json.load(f)
+        strip_quantization_keys(cfg)
+        with open(cfg_path, "w", encoding="utf-8") as f:
+            json.dump(cfg, f)
+
+    with zipfile.ZipFile(dst_zip, 'w', compression=zipfile.ZIP_DEFLATED) as zout:
+        for root, _, files in os.walk(tmp_dir):
+            for file in files:
+                full_p = os.path.join(root, file)
+                rel_p = os.path.relpath(full_p, tmp_dir)
+                zout.write(full_p, rel_p)
+
+    shutil.rmtree(tmp_dir)
 
 @st.cache_resource
 def load_classification_model():
-    if not os.path.exists(MODEL_LOCAL_PATH):
-        with st.spinner("Baixando pesos do modelo via Google Drive (apenas na 1ª execução)..."):
-            url = f"https://drive.google.com/uc?id={GDRIVE_FILE_ID}"
-            gdown.download(url, MODEL_LOCAL_PATH, quiet=False)
-            
-    if not os.path.exists(MODEL_LOCAL_PATH):
-        st.error("Falha ao obter o arquivo do modelo. Verifique se o link no Google Drive está com acesso público.")
-        st.stop()
+    if not os.path.exists(MODEL_PATCHED_PATH):
+        if not os.path.exists(MODEL_RAW_PATH):
+            with st.spinner("Baixando pesos do modelo via Google Drive (apenas na 1ª inicialização)..."):
+                url = f"https://drive.google.com/uc?id={GDRIVE_FILE_ID}"
+                gdown.download(url, MODEL_RAW_PATH, quiet=False)
+                
+        with st.spinner("Adaptando compatibilidade de serialização..."):
+            patch_keras_zip(MODEL_RAW_PATH, MODEL_PATCHED_PATH)
 
     try:
         keras.config.enable_unsafe_deserialization()
     except Exception:
         pass
 
+    custom_objects = {
+        "preprocess_input": tf.keras.applications.inception_v3.preprocess_input
+    }
+
     return keras.models.load_model(
-        MODEL_LOCAL_PATH,
+        MODEL_PATCHED_PATH,
+        custom_objects=custom_objects,
         compile=False,
         safe_mode=False
     )
@@ -90,11 +136,9 @@ if uploaded_file is not None:
         st.subheader("1. Lâmina Enviada")
         st.image(image, use_container_width=True)
 
-    # Pré-processamento
     img_resized = image.resize((299, 299))
     img_array = np.expand_dims(np.array(img_resized, dtype=np.float32), axis=0)
 
-    # Predição
     with st.spinner("Processando diagnóstico..."):
         prob = float(model.predict(img_array, verbose=0)[0][0])
         is_malignant = prob >= threshold
