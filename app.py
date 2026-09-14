@@ -32,31 +32,18 @@ def load_classification_model():
     if not os.path.exists(MODEL_LOCAL_PATH):
         st.error("Falha ao obter o arquivo do modelo. Verifique se o link no Google Drive está com acesso público.")
         st.stop()
-        
-    # Mapeamento completo de possíveis objetos/funções usadas no treinamento
-    custom_dict = {
-        "preprocess_input": tf.keras.applications.inception_v3.preprocess_input,
-        "Functional": keras.models.Functional,
-        "Model": keras.Model
-    }
 
-    # Desativa checagem estrita de objetos seguros
-    keras.config.enable_unsafe_deserialization()
-
+    # Habilita a desserialização de qualquer camada ou objeto do modelo
     try:
-        return keras.saving.load_model(
-            MODEL_LOCAL_PATH,
-            custom_objects=custom_dict,
-            compile=False,
-            safe_mode=False
-        )
+        keras.config.enable_unsafe_deserialization()
     except Exception:
-        return keras.models.load_model(
-            MODEL_LOCAL_PATH,
-            custom_objects=custom_dict,
-            compile=False,
-            safe_mode=False
-        )
+        pass
+
+    return keras.models.load_model(
+        MODEL_LOCAL_PATH,
+        compile=False,
+        safe_mode=False
+    )
 
 model = load_classification_model()
 
