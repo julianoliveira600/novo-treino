@@ -1,6 +1,6 @@
 import streamlit as st
-import keras
 import tensorflow as tf
+from tensorflow import keras
 import numpy as np
 import cv2
 from PIL import Image
@@ -33,11 +33,23 @@ def load_classification_model():
         st.error("Falha ao obter o arquivo do modelo. Verifique se o link no Google Drive está com acesso público.")
         st.stop()
         
-    return keras.models.load_model(
-        MODEL_LOCAL_PATH,
-        compile=False,
-        safe_mode=False
-    )
+    custom_objects = {
+        "preprocess_input": tf.keras.applications.inception_v3.preprocess_input
+    }
+
+    try:
+        return keras.models.load_model(
+            MODEL_LOCAL_PATH,
+            custom_objects=custom_objects,
+            compile=False,
+            safe_mode=False
+        )
+    except Exception:
+        return keras.models.load_model(
+            MODEL_LOCAL_PATH,
+            compile=False,
+            safe_mode=False
+        )
 
 model = load_classification_model()
 
