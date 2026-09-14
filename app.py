@@ -1,6 +1,6 @@
 import streamlit as st
+import keras
 import tensorflow as tf
-from tensorflow import keras
 import numpy as np
 import cv2
 from PIL import Image
@@ -30,10 +30,9 @@ def load_classification_model():
             gdown.download(url, MODEL_LOCAL_PATH, quiet=False)
             
     if not os.path.exists(MODEL_LOCAL_PATH):
-        st.error("Falha ao obter o arquivo do modelo. Verifique o compartilhamento do Google Drive.")
+        st.error("Falha ao obter o arquivo do modelo. Verifique se o link no Google Drive está com acesso público.")
         st.stop()
         
-    # Carregamento nativo Keras 3 sem restrições de serialização
     return keras.models.load_model(
         MODEL_LOCAL_PATH,
         compile=False,
