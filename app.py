@@ -181,11 +181,28 @@ threshold = st.sidebar.slider(
 )
 
 st.sidebar.markdown("---")
+st.sidebar.subheader("🎨 Ajustes do Grad-CAM")
+
+cam_sensitivity = st.sidebar.slider(
+    "Sensibilidade do Mapa:",
+    min_value=0.05,
+    max_value=0.50,
+    value=0.15,
+    step=0.05,
+    help="Valores menores exibem ativações mais sutis e difusas do tumor."
+)
+
+cam_opacity = st.sidebar.slider(
+    "Opacidade Térmica:",
+    min_value=0.30,
+    max_value=0.90,
+    value=0.70,
+    step=0.05,
+    help="Define o quão vivo o mapa de calor será sobreposto à lâmina."
+)
+
+st.sidebar.markdown("---")
 st.sidebar.markdown("### Métricas de Validação Independente")
-st.sidebar.write("- **Acurácia Global:** 94,81%")
-st.sidebar.write("- **ROC AUC:** 0,9893")
-st.sidebar.write("- **Sensibilidade:** 91,38%")
-st.sidebar.write("- **Especificidade:** 98,96%")
 
 # -------------------------------------------------------------
 # 5. ÁREA PRINCIPAL E FLUXO DE INFERÊNCIA
