@@ -1,28 +1,24 @@
 import streamlit as st
-import os
-
-# Força compatibilidade com Keras 2 / tf-keras
-os.environ["TF_USE_LEGACY_KERAS"] = "1"
-
 import tensorflow as tf
 from tensorflow import keras
 import numpy as np
 import cv2
 from PIL import Image
+import os
 import gdown
 
-# ----------------------------------------------------------------------
+# -------------------------------------------------------------
 # 1. CONFIGURAÇÃO DA PÁGINA
-# ----------------------------------------------------------------------
+# -------------------------------------------------------------
 st.set_page_config(
     page_title="Triagem Histopatológica com IA",
     page_icon="🔬",
     layout="wide"
 )
 
-# ----------------------------------------------------------------------
+# -------------------------------------------------------------
 # 2. DOWNLOAD E CARREGAMENTO DO MODELO VIA GOOGLE DRIVE
-# ----------------------------------------------------------------------
+# -------------------------------------------------------------
 GDRIVE_FILE_ID = "1AR-GAa8DAdIGEmmXMOLW93hnDNgzmm9p"
 MODEL_LOCAL_PATH = "inception_multiscale_best.keras"
 
@@ -37,29 +33,18 @@ def load_classification_model():
         st.error("Falha ao obter o arquivo do modelo. Verifique o compartilhamento do Google Drive.")
         st.stop()
         
-    custom_objects = {
-        "preprocess_input": tf.keras.applications.inception_v3.preprocess_input
-    }
-        
-    try:
-        return keras.models.load_model(
-            MODEL_LOCAL_PATH, 
-            custom_objects=custom_objects,
-            compile=False,
-            safe_mode=False
-        )
-    except Exception:
-        import tf_keras
-        return tf_keras.models.load_model(
-            MODEL_LOCAL_PATH, 
-            compile=False
-        )
+    # Carregamento nativo Keras 3 sem restrições de serialização
+    return keras.models.load_model(
+        MODEL_LOCAL_PATH,
+        compile=False,
+        safe_mode=False
+    )
 
 model = load_classification_model()
 
-# ----------------------------------------------------------------------
+# -------------------------------------------------------------
 # 3. BARRA LATERAL (CONFIGURAÇÕES E MÉTRICAS)
-# ----------------------------------------------------------------------
+# -------------------------------------------------------------
 st.sidebar.title("🔬 Parâmetros do Sistema")
 st.sidebar.markdown("**Arquitetura:** InceptionV3 Multiescala")
 st.sidebar.markdown("**Entrada:** 299 × 299 px")
@@ -80,9 +65,9 @@ st.sidebar.write("- **ROC AUC:** 0,9893")
 st.sidebar.write("- **Sensibilidade:** 91,38%")
 st.sidebar.write("- **Especificidade:** 98,96%")
 
-# ----------------------------------------------------------------------
+# -------------------------------------------------------------
 # 4. ÁREA PRINCIPAL E FLUXO DE INFERÊNCIA
-# ----------------------------------------------------------------------
+# -------------------------------------------------------------
 st.title("Sistema de Auxílio ao Diagnóstico Histopatológico (H&E)")
 st.markdown("Plataforma computacional para classificação e explicabilidade visual de lâminas teciduais.")
 
@@ -97,7 +82,6 @@ if uploaded_file is not None:
 
     col1, col2, col3 = st.columns([1, 1, 1])
 
-    # Coluna 1: Imagem enviada
     with col1:
         st.subheader("1. Lâmina Enviada")
         st.image(image, use_container_width=True)
@@ -112,7 +96,6 @@ if uploaded_file is not None:
         is_malignant = prob >= threshold
         diagnostico = "Maligno" if is_malignant else "Benigno"
 
-    # Coluna 2: Resultado e Métricas
     with col2:
         st.subheader("2. Laudo Automatizado")
         if is_malignant:
@@ -124,7 +107,6 @@ if uploaded_file is not None:
         st.progress(prob)
         st.caption(f"Critério clínico adotado: Maligno se P ≥ {threshold:.2f}")
 
-    # Coluna 3: Grad-CAM
     with col3:
         st.subheader("3. Explicabilidade (Grad-CAM)")
         try:
