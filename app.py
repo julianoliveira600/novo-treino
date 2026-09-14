@@ -1,12 +1,11 @@
 import streamlit as st
-import traceback
-import json
-import zipfile
-import os
-import gdown
+import tensorflow as tf
+import keras
 import numpy as np
 import cv2
 from PIL import Image
+import os
+import gdown
 
 # -------------------------------------------------------------
 # 1. CONFIGURAÇÃO DA PÁGINA
@@ -18,7 +17,16 @@ st.set_page_config(
 )
 
 # -------------------------------------------------------------
-# 2. DOWNLOAD E CARREGAMENTO DO MODELO VIA GOOGLE DRIVE
+# 2. PATCH DE COMPATIBILIDADE PARA O KERAS 3
+# -------------------------------------------------------------
+# Corrige o erro "Unrecognized keyword arguments passed to Dense: {'quantization_config': None}"
+class CompatibleDense(keras.layers.Dense):
+    def __init__(self, *args, **kwargs):
+        kwargs.pop("quantization_config", None)
+        super().__init__(*args, **kwargs)
+
+# -------------------------------------------------------------
+# 3. DOWNLOAD E CARREGAMENTO DO MODELO VIA GOOGLE DRIVE
 # -------------------------------------------------------------
 GDRIVE_FILE_ID = "1AR-GAa8DAdIGEmmXMOLW93hnDNgzmm9p"
 MODEL_LOCAL_PATH = "inception_multiscale_best.keras"
@@ -31,62 +39,30 @@ def load_classification_model():
             gdown.download(url, MODEL_LOCAL_PATH, quiet=False)
             
     if not os.path.exists(MODEL_LOCAL_PATH):
-        st.error("Falha ao obter o arquivo do modelo. Verifique se o link no Google Drive está com acesso público.")
+        st.error("Falha ao obter o arquivo do modelo. Verifique o compartilhamento do Google Drive.")
         st.stop()
 
-    import tensorflow as tf
-    import keras
-
-    # Permite classes e lambdas arbitrários
     try:
         keras.config.enable_unsafe_deserialization()
     except Exception:
         pass
 
-    # Mapeamento de possíveis dependências do Inception
     custom_objects = {
+        "Dense": CompatibleDense,
         "preprocess_input": tf.keras.applications.inception_v3.preprocess_input
     }
 
-    # Tentativa 1: Keras 3 Saving API
-    try:
-        return keras.saving.load_model(
-            MODEL_LOCAL_PATH,
-            custom_objects=custom_objects,
-            compile=False,
-            safe_mode=False
-        )
-    except Exception as e1:
-        # Tentativa 2: tf.keras nativo
-        try:
-            return tf.keras.models.load_model(
-                MODEL_LOCAL_PATH,
-                custom_objects=custom_objects,
-                compile=False,
-                safe_mode=False
-            )
-        except Exception as e2:
-            # Mostra o erro REAL na tela sem censura do Streamlit
-            st.error("⚠️ O Keras não conseguiu carregar o modelo. Abaixo está a mensagem exata:")
-            st.error(f"Erro Keras 3: {e1}")
-            st.error(f"Erro TF Keras: {e2}")
-            
-            # Inspeciona o arquivo .keras (que é um ZIP) para mostrar a arquitetura
-            try:
-                with zipfile.ZipFile(MODEL_LOCAL_PATH, 'r') as zf:
-                    if 'config.json' in zf.namelist():
-                        cfg = json.loads(zf.read('config.json'))
-                        st.info(f"Classe principal do modelo: {cfg.get('class_name')}")
-            except Exception:
-                pass
-            
-            st.code(traceback.format_exc())
-            st.stop()
+    return keras.models.load_model(
+        MODEL_LOCAL_PATH,
+        custom_objects=custom_objects,
+        compile=False,
+        safe_mode=False
+    )
 
 model = load_classification_model()
 
 # -------------------------------------------------------------
-# 3. BARRA LATERAL (CONFIGURAÇÕES E MÉTRICAS)
+# 4. BARRA LATERAL (CONFIGURAÇÕES E MÉTRICAS)
 # -------------------------------------------------------------
 st.sidebar.title("🔬 Parâmetros do Sistema")
 st.sidebar.markdown("**Arquitetura:** InceptionV3 Multiescala")
@@ -109,7 +85,7 @@ st.sidebar.write("- **Sensibilidade:** 91,38%")
 st.sidebar.write("- **Especificidade:** 98,96%")
 
 # -------------------------------------------------------------
-# 4. ÁREA PRINCIPAL E FLUXO DE INFERÊNCIA
+# 5. ÁREA PRINCIPAL E FLUXO DE INFERÊNCIA
 # -------------------------------------------------------------
 st.title("Sistema de Auxílio ao Diagnóstico Histopatológico (H&E)")
 st.markdown("Plataforma computacional para classificação e explicabilidade visual de lâminas teciduais.")
@@ -120,9 +96,6 @@ uploaded_file = st.file_uploader(
 )
 
 if uploaded_file is not None:
-    import tensorflow as tf
-    import keras
-
     image = Image.open(uploaded_file).convert("RGB")
     orig_w, orig_h = image.size
 
