@@ -1,11 +1,12 @@
 import streamlit as st
-import tensorflow as tf
-import keras
+import traceback
+import json
+import zipfile
+import os
+import gdown
 import numpy as np
 import cv2
 from PIL import Image
-import os
-import gdown
 
 # -------------------------------------------------------------
 # 1. CONFIGURAÇÃO DA PÁGINA
@@ -33,17 +34,54 @@ def load_classification_model():
         st.error("Falha ao obter o arquivo do modelo. Verifique se o link no Google Drive está com acesso público.")
         st.stop()
 
-    # Habilita a desserialização de qualquer camada ou objeto do modelo
+    import tensorflow as tf
+    import keras
+
+    # Permite classes e lambdas arbitrários
     try:
         keras.config.enable_unsafe_deserialization()
     except Exception:
         pass
 
-    return keras.models.load_model(
-        MODEL_LOCAL_PATH,
-        compile=False,
-        safe_mode=False
-    )
+    # Mapeamento de possíveis dependências do Inception
+    custom_objects = {
+        "preprocess_input": tf.keras.applications.inception_v3.preprocess_input
+    }
+
+    # Tentativa 1: Keras 3 Saving API
+    try:
+        return keras.saving.load_model(
+            MODEL_LOCAL_PATH,
+            custom_objects=custom_objects,
+            compile=False,
+            safe_mode=False
+        )
+    except Exception as e1:
+        # Tentativa 2: tf.keras nativo
+        try:
+            return tf.keras.models.load_model(
+                MODEL_LOCAL_PATH,
+                custom_objects=custom_objects,
+                compile=False,
+                safe_mode=False
+            )
+        except Exception as e2:
+            # Mostra o erro REAL na tela sem censura do Streamlit
+            st.error("⚠️ O Keras não conseguiu carregar o modelo. Abaixo está a mensagem exata:")
+            st.error(f"Erro Keras 3: {e1}")
+            st.error(f"Erro TF Keras: {e2}")
+            
+            # Inspeciona o arquivo .keras (que é um ZIP) para mostrar a arquitetura
+            try:
+                with zipfile.ZipFile(MODEL_LOCAL_PATH, 'r') as zf:
+                    if 'config.json' in zf.namelist():
+                        cfg = json.loads(zf.read('config.json'))
+                        st.info(f"Classe principal do modelo: {cfg.get('class_name')}")
+            except Exception:
+                pass
+            
+            st.code(traceback.format_exc())
+            st.stop()
 
 model = load_classification_model()
 
@@ -82,6 +120,9 @@ uploaded_file = st.file_uploader(
 )
 
 if uploaded_file is not None:
+    import tensorflow as tf
+    import keras
+
     image = Image.open(uploaded_file).convert("RGB")
     orig_w, orig_h = image.size
 
