@@ -10,8 +10,85 @@ import zipfile
 import json
 import shutil
 
+#-------------------------------------------------------------
+# 1. Importação pdf
+#-------------------------------------------------------------
+from fpdf import FPDF
+import io
+import tempfile
+from datetime import datetime
+
+def generate_pdf_report(orig_img_pil, cam_img_np, filename, prob, threshold, diagnostico):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_auto_page_break(auto=True, margin=15)
+    
+    # Cabeçalho
+    pdf.set_font("Helvetica", "B", 18)
+    pdf.cell(0, 10, "Relatório de Triagem Histopatológica", ln=True, align="C")
+    pdf.set_font("Helvetica", "I", 10)
+    pdf.cell(0, 6, f"Gerado em: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}", ln=True, align="C")
+    pdf.ln(8)
+    
+    # Metadados e Parâmetros
+    pdf.set_font("Helvetica", "B", 12)
+    pdf.cell(0, 8, "1. Dados do Exame", ln=True)
+    pdf.set_font("Helvetica", "", 10)
+    pdf.cell(0, 6, f"Arquivo da Lâmina: {filename}", ln=True)
+    pdf.cell(0, 6, "Arquitetura do Modelo: InceptionV3 Multiescala", ln=True)
+    pdf.cell(0, 6, f"Limiar Diagnóstico Adotado: {threshold:.2f}", ln=True)
+    pdf.ln(5)
+    
+    # Diagnóstico Automatizado
+    pdf.set_font("Helvetica", "B", 12)
+    pdf.cell(0, 8, "2. Resultado Automatizado", ln=True)
+    pdf.set_font("Helvetica", "B", 11)
+    
+    # Cor do texto: Vermelho para Maligno, Verde para Benigno
+    if diagnostico == "Maligno":
+        pdf.set_text_color(180, 0, 0)
+    else:
+        pdf.set_text_color(0, 130, 0)
+    pdf.cell(0, 7, f"Classificação Estimada: {diagnostico}", ln=True)
+    
+    pdf.set_text_color(0, 0, 0)
+    pdf.set_font("Helvetica", "", 10)
+    pdf.cell(0, 6, f"Probabilidade de Malignidade: {prob * 100:.2f}%", ln=True)
+    pdf.ln(8)
+    
+    # Imagens do Exame lado a lado
+    pdf.set_font("Helvetica", "B", 12)
+    pdf.cell(0, 8, "3. Registro Visual e Explicabilidade (Grad-CAM)", ln=True)
+    pdf.ln(2)
+    
+    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f_orig, \
+         tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f_cam:
+        
+        orig_img_pil.save(f_orig.name, format="PNG")
+        Image.fromarray(cam_img_np).save(f_cam.name, format="PNG")
+        
+        y_pos = pdf.get_y()
+        pdf.image(f_orig.name, x=15, y=y_pos, w=85)
+        pdf.image(f_cam.name, x=110, y=y_pos, w=85)
+        
+        # Legendas
+        pdf.set_y(y_pos + 90)
+        pdf.set_font("Helvetica", "I", 9)
+        pdf.cell(85, 6, "Lâmina Original (H&E)", align="C")
+        pdf.cell(10, 6, "")
+        pdf.cell(85, 6, "Mapa de Atenção Grad-CAM", align="C")
+        
+        os.remove(f_orig.name)
+        os.remove(f_cam.name)
+        
+    pdf.ln(15)
+    pdf.set_font("Helvetica", "I", 8)
+    pdf.multi_cell(0, 4, "Nota: Este laudo foi gerado por um modelo de aprendizado profundo para triagem computacional de apoio e não substitui a avaliação microscópica definitiva realizada por um médico patologista.")
+    
+    return bytes(pdf.output())
+
 # -------------------------------------------------------------
-# 1. CONFIGURAÇÃO DA PÁGINA
+# 1.1 CONFIGURAÇÃO DA PÁGINA
 # -------------------------------------------------------------
 st.set_page_config(
     page_title="Triagem Histopatológica com IA",
@@ -131,6 +208,24 @@ if uploaded_file is not None:
     orig_w, orig_h = image.size
 
     col1, col2, col3 = st.columns([1, 1, 1])
+
+    st.markdown("---")
+    pdf_data = generate_pdf_report(
+        orig_img_pil=image,
+        cam_img_np=superimposed,
+        filename=uploaded_file.name,
+        prob=prob,
+        threshold=threshold,
+        diagnostico=diagnostico
+    )
+
+    st.download_button(
+        label="📄 Baixar Laudo Diagnóstico em PDF",
+        data=pdf_data,
+        file_name=f"laudo_{uploaded_file.name.split('.')[0]}.pdf",
+        mime="application/pdf",
+        use_container_width=True
+    )
 
     with col1:
         st.subheader("1. Lâmina Enviada")
