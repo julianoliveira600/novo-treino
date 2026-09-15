@@ -287,43 +287,52 @@ if uploaded_file is not None:
     with col3:
         st.subheader("3. Explicabilidade (Grad-CAM)")
         try:
-            last_conv = model.get_layer("mixed7")
-            penultimate = model.get_layer("dense")
-            classifier = model.get_layer("classifier")
-            grad_model = keras.Model(inputs=model.inputs, outputs=[last_conv.output, penultimate.output])
+            # Seleciona a última camada convolucional rica em características
+            target_layer = model.get_layer("mixed7")
+            grad_model = keras.Model(
+                inputs=model.inputs,
+                outputs=[target_layer.output, model.output]
+            )
 
             with tf.GradientTape() as tape:
-                conv_out, dense_out = grad_model(img_array, training=False)
-                tape.watch(conv_out)
-                w, b = classifier.get_weights()
-                logit = tf.matmul(dense_out, w) + b
-                target = logit[0, 0] if logit[0, 0] >= 0 else -logit[0, 0]
+                conv_out, preds = grad_model(img_array, training=False)
+                # Alvo do gradiente: predição de malignidade
+                target_class = preds[:, 0]
 
-            grads = tape.gradient(target, conv_out)
+            # Gradientes dos mapas de ativação em relação à predição
+            grads = tape.gradient(target_class, conv_out)
             pooled_grads = tf.reduce_mean(grads, axis=(0, 1, 2))
-            
-            heatmap = tf.maximum(conv_out[0] @ pooled_grads[..., tf.newaxis], 0.0)
+
+            # Ponderação dos canais convolucionais e aplicação de ReLU
+            heatmap = conv_out[0] @ pooled_grads[..., tf.newaxis]
             heatmap = tf.squeeze(heatmap).numpy()
+            heatmap = np.maximum(heatmap, 0)
 
-            if heatmap.max() > 0:
-                heatmap /= heatmap.max()
+            # Normalização de contraste para destacar focos reais
+            if np.max(heatmap) > 1e-7:
+                heatmap = (heatmap - np.min(heatmap)) / (np.max(heatmap) - np.min(heatmap))
+            else:
+                heatmap = np.zeros_like(heatmap)
 
-            # Escalonamento adaptativo por percentil (evita apagar áreas ativadas)
-            p_min = np.percentile(heatmap, cam_sensitivity * 100)
-            heatmap_norm = np.clip((heatmap - p_min) / (heatmap.max() - p_min + 1e-8), 0, 1)
-
-            heatmap_smooth = cv2.GaussianBlur(heatmap_norm, (5, 5), 0)
-            heatmap_resized = cv2.resize(heatmap_smooth, (orig_w, orig_h), interpolation=cv2.INTER_CUBIC)
+            # Redimensionamento suave para o tamanho nativo da imagem
+            heatmap_resized = cv2.resize(heatmap, (orig_w, orig_h), interpolation=cv2.INTER_CUBIC)
             heatmap_resized = np.clip(heatmap_resized, 0, 1)
 
-            heatmap_color = cv2.applyColorMap(np.uint8(255 * heatmap_resized), cv2.COLORMAP_JET)
+            # Aplicação do limiar de corte dinâmico da barra lateral
+            # Zera ativações frias/de fundo para deixar o tecido limpo
+            mask = heatmap_resized >= cam_sensitivity
+            heatmap_masked = np.where(mask, heatmap_resized, 0.0)
+
+            # Gerar mapa térmico JET
+            heatmap_color = cv2.applyColorMap(np.uint8(255 * heatmap_masked), cv2.COLORMAP_JET)
             heatmap_color = cv2.cvtColor(heatmap_color, cv2.COLOR_BGR2RGB)
 
-            alpha_mask = np.expand_dims(heatmap_resized, axis=-1)
+            # Sobreposição direta apenas onde houve ativação
+            alpha = np.expand_dims(heatmap_masked * cam_opacity, axis=-1)
             orig_img_np = np.array(image, dtype=np.float32)
             heatmap_color_float = heatmap_color.astype(np.float32)
 
-            blend = orig_img_np * (1.0 - cam_opacity * alpha_mask) + heatmap_color_float * (cam_opacity * alpha_mask)
+            blend = orig_img_np * (1.0 - alpha) + heatmap_color_float * alpha
             superimposed = np.clip(blend, 0, 255).astype(np.uint8)
 
             st.image(superimposed, use_container_width=True)
