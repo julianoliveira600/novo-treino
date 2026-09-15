@@ -307,6 +307,11 @@ if uploaded_file is not None:
             heatmap = conv_out[0] @ pooled_grads[..., tf.newaxis]
             heatmap = tf.squeeze(heatmap).numpy()
             heatmap = np.maximum(heatmap, 0)
+            # Remove artefatos de zero-padding das bordas do tensor
+            heatmap[0, :] = 0
+            heatmap[-1, :] = 0
+            heatmap[:, 0] = 0
+            heatmap[:, -1] = 0
 
             # Normalização de contraste para destacar focos reais
             if np.max(heatmap) > 1e-7:
