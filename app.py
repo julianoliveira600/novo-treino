@@ -311,6 +311,7 @@ if uploaded_file is not None:
             # Normalização de contraste para destacar focos reais
             if np.max(heatmap) > 1e-7:
                 heatmap = (heatmap - np.min(heatmap)) / (np.max(heatmap) - np.min(heatmap))
+                heatmap = heatmap * prob
             else:
                 heatmap = np.zeros_like(heatmap)
 
