@@ -308,8 +308,11 @@ if uploaded_file is not None:
             if heatmap.max() > 0:
                 heatmap /= heatmap.max()
 
-            heatmap_filtered = np.where(heatmap >= cam_sensitivity, heatmap, 0.0)
-            heatmap_smooth = cv2.GaussianBlur(heatmap_filtered, (5, 5), 0)
+            # Escalonamento adaptativo por percentil (evita apagar áreas ativadas)
+            p_min = np.percentile(heatmap, cam_sensitivity * 100)
+            heatmap_norm = np.clip((heatmap - p_min) / (heatmap.max() - p_min + 1e-8), 0, 1)
+
+            heatmap_smooth = cv2.GaussianBlur(heatmap_norm, (5, 5), 0)
             heatmap_resized = cv2.resize(heatmap_smooth, (orig_w, orig_h), interpolation=cv2.INTER_CUBIC)
             heatmap_resized = np.clip(heatmap_resized, 0, 1)
 
